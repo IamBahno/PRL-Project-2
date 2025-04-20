@@ -7,7 +7,8 @@ if [ $# -eq 0 ]; then
 fi
 
 tree="$1"
-X=${#tree}
+n=${#tree}
+X=$((2 * n - 2))
 
 mpic++ --prefix /usr/local/share/OpenMPI -o vuv vuv.cpp
 
