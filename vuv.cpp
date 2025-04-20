@@ -20,6 +20,37 @@ struct Neighbour{
 };
 
 void create_adjecency_list(string tree_string,vector<Edge> *edges, vector<vector<Neighbour>> *neighbours){
+    int n = tree_string.size();
+    neighbours->resize(n);
+
+    int edge_id = 0;
+
+    // in each iteratoin create edges with the nodes childrens, forward and reverse
+    for (int i = 0; i < n; ++i) {
+        int left = 2 * i + 1;
+        int right = 2 * i + 2;
+
+        if (left < n) {
+            edges->push_back({edge_id, tree_string[i], tree_string[left]});
+            neighbours->at(i).push_back({edge_id, edge_id + 1});
+
+            edges->push_back({edge_id + 1, tree_string[left], tree_string[i]});
+            neighbours->at(left).push_back({edge_id + 1, edge_id});
+
+            edge_id += 2;
+        }
+
+        if (right < n) {
+            edges->push_back({edge_id, tree_string[i], tree_string[right]});
+            neighbours->at(i).push_back({edge_id, edge_id + 1});
+
+            edges->push_back({edge_id + 1, tree_string[right], tree_string[i]});
+            neighbours->at(right).push_back({edge_id + 1, edge_id});
+
+            edge_id += 2;
+        }
+    }
+
     return;
 }
 
@@ -39,11 +70,8 @@ int main(int argc, char** argv) {
     if (rank == 0) {
         std::cout << "🌲 trunk" << tree_string << "\n";
 
-        // TODO creates an adjecent list
         create_adjecency_list(tree_string,&edges,&neighbours);
-        // and share with other proccesses
     }
-
 
 
     // Finalize
