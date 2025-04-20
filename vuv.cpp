@@ -54,6 +54,69 @@ void create_adjecency_list(string tree_string,vector<Edge> *edges, vector<vector
     return;
 }
 
+// flatten vector of neighboars into an array of int
+void flatten_vector(int *array, vector<Neighbour> *vector)
+{
+    int index = 0;
+    for (int i = 0; i < vector->size(); i++)
+    {
+        array[index] = vector->at(i).forward;
+        array[index + 1] = vector->at(i).reverse;
+        
+        index += 2;
+    }
+}
+void send_neighbours(vector<vector<Neighbour>> *neighbours, int size){
+    int neighbours_size = neighbours->size();
+    // Broadcast the total number of vectors to all processes
+    MPI_Bcast(&neighbours_size, 1, MPI_INT, 0, MPI_COMM_WORLD);
+    for(int vector = 0; vector < neighbours_size; vector++){
+        int vector_size = neighbours->at(vector).size() *2;//how many ints are there in thsi vector;
+        int *int_array = new int[vector_size];
+        flatten_vector(int_array, &neighbours->at(vector));
+        // Broadcast the size of the vector (number of elements)
+        MPI_Bcast(&vector_size, 1, MPI_INT, 0, MPI_COMM_WORLD);
+        // Broadcast the flattened vector
+        MPI_Bcast(int_array, vector_size, MPI_INT, 0, MPI_COMM_WORLD);
+        
+        delete[] int_array;
+    }
+}
+
+void receive_neighbours(vector<vector<Neighbour>> *neighbours,int rank) {
+    // Receive the total number of vectors (neighbours_size)
+    int neighbours_size;
+    MPI_Bcast(&neighbours_size, 1, MPI_INT, 0, MPI_COMM_WORLD);
+    // Now, receive each vector and reconstruct it
+    for (int vector = 0; vector < neighbours_size; vector++) {
+        int vector_size;
+        
+        // Receive the size of the current vector
+        MPI_Bcast(&vector_size, 1, MPI_INT, 0, MPI_COMM_WORLD);
+
+        // Allocate memory for the flattened array
+        int *int_array = new int[vector_size];
+
+        // Receive the flattened vector
+        MPI_Bcast(int_array, vector_size, MPI_INT, 0, MPI_COMM_WORLD);
+
+        // Reconstruct the vector (convert int_array back into a vector of Neighbour)
+        std::vector<Neighbour> current_vector;
+        for (int i = 0; i < vector_size; i += 2) {
+            // Create a Neighbour from pairs of integers
+            Neighbour neighbour = { int_array[i], int_array[i + 1] };
+            current_vector.push_back(neighbour);
+        }
+
+        // Add the reconstructed vector to the neighbours list
+        neighbours->push_back(current_vector);
+
+        // Clean up allocated memory for the flattened array
+        delete[] int_array;
+    }
+}
+
+
 int main(int argc, char** argv) {
     // Init MPI
     MPI_Init(&argc, &argv);
@@ -67,10 +130,17 @@ int main(int argc, char** argv) {
 
     std::string tree_string = argv[1];
 
-    if (rank == 0) {
-        std::cout << "🌲 trunk" << tree_string << "\n";
+    int edge_id;
+    vector<vector<Neighbour>> new_neighbours;
 
+    if (rank == 0) {
         create_adjecency_list(tree_string,&edges,&neighbours);
+
+        send_neighbours(&neighbours,size);
+        new_neighbours = neighbours;
+    } 
+    else{
+        receive_neighbours(&new_neighbours,rank);
     }
 
 
