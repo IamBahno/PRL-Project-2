@@ -54,7 +54,7 @@ void create_adjecency_list(string tree_string,vector<Edge> *edges, vector<vector
     return;
 }
 
-// flatten vector of neighboars into an array of int
+// flatten vector of neighbours into an array of int
 void flatten_vector(int *array, vector<Neighbour> *vector)
 {
     int index = 0;
@@ -116,6 +116,56 @@ void receive_neighbours(vector<vector<Neighbour>> *neighbours,int rank) {
     }
 }
 
+void print_adjecency_list(vector<vector<Neighbour>> new_neighbours){
+    for (size_t i = 0; i < new_neighbours.size(); ++i) {
+        std::cerr << "["; 
+        for (size_t j = 0; j < new_neighbours[i].size(); ++j) {
+            const auto& neighbour = new_neighbours[i][j];
+            
+            // Print neighbour details
+            std::cerr << neighbour.forward << "," << neighbour.reverse;
+
+            // Avoid printing a comma after the last neighbour
+            if (j != new_neighbours[i].size() - 1) {
+                std::cerr << ", ";
+            }
+        }
+        std::cerr << "] ";
+    }
+    std::cerr << std::endl;
+
+}
+
+
+// Returns the next edge to be visited  in euler tour
+int euler_tour(int edge, vector<vector<Neighbour>>neighbours){
+    // First find the reverse edge to the currente edge
+    int reverse;
+    for(int i =0; i < neighbours.size();i++){
+        for(int j = 0; j < neighbours.at(i).size();j++){
+            if(edge == neighbours.at(i).at(j).forward){
+                reverse = neighbours.at(i).at(j).reverse;
+            }
+        }
+    }
+
+    // Now find where is the reverse edge as forward edge
+    for(int i =0; i < neighbours.size();i++){
+        for(int j = 0; j < neighbours.at(i).size();j++){
+            if(reverse == neighbours.at(i).at(j).forward){
+                // If its not last last edge pair at given list, return the next forward edge after the found pair
+                if(j < neighbours.at(i).size() - 1){
+                    return neighbours.at(i).at(j+1).forward;
+                }
+                // Else return the the first forwas edge at given edge pair list
+                else{
+                    return neighbours.at(i).at(0).forward;
+                }
+            }
+        }
+    }
+    return -1;
+}
 
 int main(int argc, char** argv) {
     // Init MPI
@@ -130,7 +180,6 @@ int main(int argc, char** argv) {
 
     std::string tree_string = argv[1];
 
-    int edge_id;
     vector<vector<Neighbour>> new_neighbours;
 
     if (rank == 0) {
@@ -143,10 +192,10 @@ int main(int argc, char** argv) {
         receive_neighbours(&new_neighbours,rank);
     }
 
-
+    int edge_id = rank;
+    int next_tour = euler_tour(edge_id,new_neighbours);
+    // std::cout << "Edge: " << edge_id << " Next: "<< next_tour << std::endl;
     // Finalize
     MPI_Finalize();
     return 0;
 }
-
-// TODO find out how many procceses to be spawned
