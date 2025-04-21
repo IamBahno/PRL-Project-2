@@ -66,6 +66,8 @@ void flatten_vector(int *array, vector<Neighbour> *vector)
         index += 2;
     }
 }
+
+// broadcast the adjecency list to all processes
 void send_neighbours(vector<vector<Neighbour>> *neighbours, int size){
     int neighbours_size = neighbours->size();
     // Broadcast the total number of vectors to all processes
@@ -83,6 +85,7 @@ void send_neighbours(vector<vector<Neighbour>> *neighbours, int size){
     }
 }
 
+// Receive and reconstruct the adjecency list
 void receive_neighbours(vector<vector<Neighbour>> *neighbours,int rank) {
     // Receive the total number of vectors (neighbours_size)
     int neighbours_size;
@@ -116,16 +119,15 @@ void receive_neighbours(vector<vector<Neighbour>> *neighbours,int rank) {
     }
 }
 
+// Printing for debugging
 void print_adjecency_list(vector<vector<Neighbour>> new_neighbours){
     for (size_t i = 0; i < new_neighbours.size(); ++i) {
         std::cerr << "["; 
         for (size_t j = 0; j < new_neighbours[i].size(); ++j) {
             const auto& neighbour = new_neighbours[i][j];
             
-            // Print neighbour details
             std::cerr << neighbour.forward << "," << neighbour.reverse;
 
-            // Avoid printing a comma after the last neighbour
             if (j != new_neighbours[i].size() - 1) {
                 std::cerr << ", ";
             }
@@ -138,7 +140,7 @@ void print_adjecency_list(vector<vector<Neighbour>> new_neighbours){
 
 
 // Returns the next edge to be visited  in euler tour
-int euler_tour(int edge, vector<vector<Neighbour>>neighbours){
+int create_euler_tour(int edge, vector<vector<Neighbour>>neighbours){
     // First find the reverse edge to the currente edge
     int reverse;
     for(int i =0; i < neighbours.size();i++){
@@ -167,6 +169,36 @@ int euler_tour(int edge, vector<vector<Neighbour>>neighbours){
     return -1;
 }
 
+// Rank 0 collect the euler root into *euler_toor
+void euler_to_rank0(vector<int> *euler_tour,int next_tour,int rank,int world_size){
+    if(rank == 0){
+        euler_tour->at(0) = next_tour; // sets its own value
+        int next_edge;
+        for(int i = 1; i < world_size;i++)
+        {
+            MPI_Recv(&next_edge, 1, MPI_INT, i, 0, MPI_COMM_WORLD, NULL);
+            euler_tour->at(i) = next_edge;
+        }
+    }
+    else{
+        MPI_Send(&next_tour, 1, MPI_INT, 0, 0, MPI_COMM_WORLD);
+    }
+}
+
+// The last edge that is going to the root (the second one) is looped to the same node it coming from
+// that way creating a root
+void introduce_root(vector<int> *euler_tour,vector<Edge> *edges,char root_char){
+    bool first = true;
+    for(Edge& edge : *edges){
+        if(edge.to == root_char){
+            if(first == true){first = false;continue;}
+            edge.to = edge.from;
+            euler_tour->at(edge.id) = edge.id;
+            break;
+        }
+    }
+}
+
 int main(int argc, char** argv) {
     // Init MPI
     MPI_Init(&argc, &argv);
@@ -183,18 +215,41 @@ int main(int argc, char** argv) {
     vector<vector<Neighbour>> new_neighbours;
 
     if (rank == 0) {
+        // Rank 0 parses the input string and creates the adjacency list
+        // I use a vector for the adjacency list since it's conviniet dynamic type
         create_adjecency_list(tree_string,&edges,&neighbours);
 
+        //  and distributes neighbour information to all processes
         send_neighbours(&neighbours,size);
         new_neighbours = neighbours;
     } 
     else{
+        // Other proccesses receives the neighbour list
         receive_neighbours(&new_neighbours,rank);
     }
 
+    //Each process/edge finds its following edge 
     int edge_id = rank;
-    int next_tour = euler_tour(edge_id,new_neighbours);
-    // std::cout << "Edge: " << edge_id << " Next: "<< next_tour << std::endl;
+    int next_tour = create_euler_tour(edge_id,new_neighbours);
+
+    // Rank 0 collects the euler tour to euler_tour
+    vector<int> euler_tour(edges.size());
+    euler_to_rank0(&euler_tour,next_tour,rank,size);
+
+    //Change the root so there is root
+    if(rank == 0){
+        introduce_root(&euler_tour,&edges,tree_string[0]);
+    }
+    // Send the euler tour values backto the proccesse, one proccess will recieve changed value
+    MPI_Scatter(euler_tour.data(),1,MPI_INT,&next_tour,1,MPI_INT,0,MPI_COMM_WORLD);
+
+    // if(rank == 0){
+    //     for(int i = 0; i < euler_tour.size();i++){
+    //         std::cout << "Edge: "<< i << "next: " << euler_tour.at(i)<< std::endl;
+    //     }
+    // }
+    std::cerr << "Rank " << rank << " received euler_tour value: " << next_tour << std::endl;
+
     // Finalize
     MPI_Finalize();
     return 0;
