@@ -3,6 +3,7 @@
 #include <vector>
 #include <string>
 #include <cstdlib>
+#include <cmath>
 
 using namespace std;
 
@@ -187,15 +188,53 @@ void euler_to_rank0(vector<int> *euler_tour,int next_tour,int rank,int world_siz
 
 // The last edge that is going to the root (the second one) is looped to the same node it coming from
 // that way creating a root
-void introduce_root(vector<int> *euler_tour,vector<Edge> *edges,char root_char){
+// Return the id of the self loop edge
+int introduce_root(vector<int> *euler_tour,vector<Edge> *edges,char root_char){
     bool first = true;
     for(Edge& edge : *edges){
         if(edge.to == root_char){
             if(first == true){first = false;continue;}
             edge.to = edge.from;
             euler_tour->at(edge.id) = edge.id;
-            break;
+            return edge.id;
         }
+    }
+    return -1;
+}
+
+// ranks is the vector which will be filled with the distance to end (ranks)
+// parameter rank is id of process/edge
+// euler tour is euler tour with root altered
+// Using the path doubling alghorithm
+void create_rank_vector(vector<int> *ranks,vector<int> *euler_tour,int rank,int size, int self_loop_edge_id){
+    
+    //crete copy of euler rout
+    //we dont want cange the original
+    vector<int> succesor_list;
+    if (rank == 0) {
+        succesor_list = *euler_tour;
+    }else{
+        succesor_list.resize(size);
+    }
+    // share it with all processes
+    MPI_Bcast(succesor_list.data(), size, MPI_INT, 0, MPI_COMM_WORLD);
+    // rank 0 creates a ranks vector, filled with ones, only the self loop edge will be 0
+    if (rank == 0) {
+        ranks->assign(size, 1);
+        ranks->at(self_loop_edge_id) = 0;
+    }else{
+        ranks->resize(size);
+    }
+    // share with all
+    MPI_Bcast(ranks->data(), size, MPI_INT, 0, MPI_COMM_WORLD);
+
+    // each edge in each iteration find its rank and succesor
+    // all processes then then gather the new values together, so each process have new updated vectors 
+    for (int k = 1; k < ceil(log2(size)) + 1;k++){
+        int new_rank = ranks->at(rank) + ranks->at(succesor_list.at(rank));
+        int new_succ = succesor_list.at(succesor_list.at(rank));
+        MPI_Allgather(&new_rank, 1, MPI_INT, ranks->data(), 1, MPI_INT, MPI_COMM_WORLD);
+        MPI_Allgather(&new_succ, 1, MPI_INT, succesor_list.data(), 1, MPI_INT, MPI_COMM_WORLD);
     }
 }
 
@@ -236,19 +275,31 @@ int main(int argc, char** argv) {
     vector<int> euler_tour(edges.size());
     euler_to_rank0(&euler_tour,next_tour,rank,size);
 
+    int self_loop_edge_id;
     //Change the root so there is root
     if(rank == 0){
-        introduce_root(&euler_tour,&edges,tree_string[0]);
+        self_loop_edge_id = introduce_root(&euler_tour,&edges,tree_string[0]);
     }
     // Send the euler tour values backto the proccesse, one proccess will recieve changed value
     MPI_Scatter(euler_tour.data(),1,MPI_INT,&next_tour,1,MPI_INT,0,MPI_COMM_WORLD);
 
+    // Compute rank vector (rank is the distance of each edge to the end)
+    vector<int> ranks;
+    create_rank_vector(&ranks,&euler_tour,rank,size,self_loop_edge_id);
+
+    
+    // if(rank == 0){
+    //     for(int i = 0; i < size;i++){
+    //         std::cout << ranks.at(i)<< std::endl;
+    //     }
+    // }
     // if(rank == 0){
     //     for(int i = 0; i < euler_tour.size();i++){
     //         std::cout << "Edge: "<< i << "next: " << euler_tour.at(i)<< std::endl;
     //     }
     // }
-    std::cerr << "Rank " << rank << " received euler_tour value: " << next_tour << std::endl;
+    // std::cerr << "Rank " << rank << " received euler_tour value: " << next_tour << std::endl;
+
 
     // Finalize
     MPI_Finalize();
