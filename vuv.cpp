@@ -238,6 +238,16 @@ void create_rank_vector(vector<int> *ranks,vector<int> *euler_tour,int rank,int 
     }
 }
 
+// Just loop thorugh rank, and create new vector with values (Size - rank)
+vector<int> create_positions_vector(vector<int> *ranks,int size){
+    vector<int> positions_vector(ranks->size());
+    for (size_t i = 0; i < size; ++i) {
+        positions_vector.at(i) = size - ranks->at(i);
+    }
+    return positions_vector;
+}
+
+
 int main(int argc, char** argv) {
     // Init MPI
     MPI_Init(&argc, &argv);
@@ -286,11 +296,12 @@ int main(int argc, char** argv) {
     // Compute rank vector (rank is the distance of each edge to the end)
     vector<int> ranks;
     create_rank_vector(&ranks,&euler_tour,rank,size,self_loop_edge_id);
-
+    // Create a vector with positions, positions is just N - rank
+    vector<int> positions = create_positions_vector(&ranks,size);
     
     // if(rank == 0){
     //     for(int i = 0; i < size;i++){
-    //         std::cout << ranks.at(i)<< std::endl;
+    //         std::cout << positions.at(i)<< std::endl;
     //     }
     // }
     // if(rank == 0){
