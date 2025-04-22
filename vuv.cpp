@@ -119,7 +119,15 @@ void receive_neighbours(vector<vector<Neighbour>> *neighbours,int rank) {
         delete[] int_array;
     }
 }
+// void send_edges(vector<Edge> *edges,int size){
+//     int *int_array = new int[size*2];
+//     flatten_vector(int_array, &edges);
 
+//     // Broadcast the flattened array
+//     MPI_Bcast(int_array, size, MPI_INT, 0, MPI_COMM_WORLD);
+    
+//     delete[] int_array;
+// }
 // Printing for debugging
 void print_adjecency_list(vector<vector<Neighbour>> new_neighbours){
     for (size_t i = 0; i < new_neighbours.size(); ++i) {
@@ -238,6 +246,46 @@ void create_rank_vector(vector<int> *ranks,vector<int> *euler_tour,int rank,int 
     }
 }
 
+void compute_sum_of_sufixes(vector<int> *weights,vector<int> *euler_tour,int rank,int size,int self_loop_edge_id){
+    
+    //crete copy of euler rout
+    //we dont want cange the original
+    vector<int> succesor_list;
+    if (rank == 0) {
+        succesor_list = *euler_tour;
+    }else{
+        succesor_list.resize(size);
+    }
+    // share it with all processes
+    MPI_Bcast(succesor_list.data(), size, MPI_INT, 0, MPI_COMM_WORLD);
+
+    //only rank 0, have self_loop_edge_id right now
+    MPI_Bcast(&self_loop_edge_id, 1, MPI_INT, 0, MPI_COMM_WORLD);
+    weights->at(self_loop_edge_id) = 0;
+
+    // if(rank == 3){
+    //     for(int i = 0; i < size;i++){
+    //         std::cout << weights->at(i)<< std::endl;
+    //     }
+    // }
+    // each edge in each iteration find its rank and succesor
+    // all processes then then gather the new values together, so each process have new updated vectors 
+    for (int k = 1; k < ceil(log2(size)) + 1;k++){
+        int new_weight = weights->at(rank) + weights->at(succesor_list.at(rank));
+        int new_succ = succesor_list.at(succesor_list.at(rank));
+        MPI_Allgather(&new_weight, 1, MPI_INT, weights->data(), 1, MPI_INT, MPI_COMM_WORLD);
+        MPI_Allgather(&new_succ, 1, MPI_INT, succesor_list.data(), 1, MPI_INT, MPI_COMM_WORLD);
+        // if(rank == 0){
+        //     cout << new_weight << endl;
+        // }
+    }
+    if(weights->at(self_loop_edge_id) != 0){
+        for (size_t i = 0; i < size; ++i) {
+            weights->at(i) = weights->at(self_loop_edge_id) - weights->at(i);
+        }
+    }
+}
+
 // Just loop thorugh rank, and create new vector with values (Size - rank)
 vector<int> create_positions_vector(vector<int> *ranks,int size){
     vector<int> positions_vector(ranks->size());
@@ -288,6 +336,11 @@ int main(int argc, char** argv) {
         // Other proccesses receives the neighbour list
         receive_neighbours(&new_neighbours,rank);
     }
+    if(rank!=0){
+        edges.resize(size);
+    }
+    // Broadcast edges to everyone
+    MPI_Bcast(edges.data(), size * sizeof(Edge), MPI_BYTE, 0, MPI_COMM_WORLD);
 
     //Each process/edge finds its following edge 
     int edge_id = rank;
@@ -322,9 +375,26 @@ int main(int argc, char** argv) {
     MPI_Allgather(&weight, 1, MPI_INT, weights.data(), 1, MPI_INT, MPI_COMM_WORLD);
 
 
-    // if(rank == 3){
+    //TMP MPTMPTM
+    //
+    // weights.assign(size,1);
+    //  TMP TMP TMP
+    // TMP TMP 
+
+    // Compute sum of sufixes on weights
+    //TODO not quite sure if is correct, the code in presentatision is.... 
+    compute_sum_of_sufixes(&weights,&euler_tour,rank,size,self_loop_edge_id);
+
+    //TODO udelat ten posledni krok, kde zjistim ty urovne
+    
+    // int level;
+    // // if you are forward edge
+    // if(weight == -1){
+    //     level = weights.at(rank) + 
+    // }
+    // if(rank == 0){
     //     for(int i = 0; i < size;i++){
-    //         std::cout << weights.at(i)<< std::endl;
+    //         std::cout << edges.at(i).id<< "from: "<<edges.at(i).from <<edges.at(i).to<< std::endl;
     //     }
     // }
     // if(rank == 0){
