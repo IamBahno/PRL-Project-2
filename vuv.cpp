@@ -247,6 +247,18 @@ vector<int> create_positions_vector(vector<int> *ranks,int size){
     return positions_vector;
 }
 
+//Loop through adjecency list to find inverse edge
+int find_inverse_edge_id(vector<vector<Neighbour>> *adjecency_list,int edge_id){
+    for(int i =0; i < adjecency_list->size();i++){
+        for(int j = 0; j < adjecency_list->at(i).size();j++){
+            if(edge_id == adjecency_list->at(i).at(j).forward){
+                return adjecency_list->at(i).at(j).reverse;
+            }
+        }
+    }
+    return -1;
+}
+
 
 int main(int argc, char** argv) {
     // Init MPI
@@ -299,9 +311,20 @@ int main(int argc, char** argv) {
     // Create a vector with positions, positions is just N - rank
     vector<int> positions = create_positions_vector(&ranks,size);
     
-    // if(rank == 0){
+    //Each edge finds its inverse edge
+    int inverse_edge_id = find_inverse_edge_id(&new_neighbours,rank);
+
+    // Create vector of weights, weight of forward edge is -1 else 1
+    // Forward edge has lower position than its iverse counterpart
+    // First each figures out it own weight, then gather it all together
+    int weight = positions.at(rank) < positions.at(inverse_edge_id) ? -1 : 1;
+    vector<int> weights(size);
+    MPI_Allgather(&weight, 1, MPI_INT, weights.data(), 1, MPI_INT, MPI_COMM_WORLD);
+
+
+    // if(rank == 3){
     //     for(int i = 0; i < size;i++){
-    //         std::cout << positions.at(i)<< std::endl;
+    //         std::cout << weights.at(i)<< std::endl;
     //     }
     // }
     // if(rank == 0){
@@ -310,7 +333,7 @@ int main(int argc, char** argv) {
     //     }
     // }
     // std::cerr << "Rank " << rank << " received euler_tour value: " << next_tour << std::endl;
-
+    // print_adjecency_list(new_neighbours);
 
     // Finalize
     MPI_Finalize();
