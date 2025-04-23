@@ -20,6 +20,11 @@ struct Neighbour{
     int reverse;
 };
 
+struct Node{
+    char name;
+    int level;
+};
+
 void create_adjecency_list(string tree_string,vector<Edge> *edges, vector<vector<Neighbour>> *neighbours){
     int n = tree_string.size();
     neighbours->resize(n);
@@ -247,9 +252,8 @@ void create_rank_vector(vector<int> *ranks,vector<int> *euler_tour,int rank,int 
 }
 
 void compute_sum_of_sufixes(vector<int> *weights,vector<int> *euler_tour,int rank,int size,int self_loop_edge_id){
-    
     //crete copy of euler rout
-    //we dont want cange the original
+    //we dont want change the original
     vector<int> succesor_list;
     if (rank == 0) {
         succesor_list = *euler_tour;
@@ -261,6 +265,7 @@ void compute_sum_of_sufixes(vector<int> *weights,vector<int> *euler_tour,int ran
 
     //only rank 0, have self_loop_edge_id right now
     MPI_Bcast(&self_loop_edge_id, 1, MPI_INT, 0, MPI_COMM_WORLD);
+    int self_loop_edge_old_value = weights->at(self_loop_edge_id);
     weights->at(self_loop_edge_id) = 0;
 
     // if(rank == 3){
@@ -279,9 +284,11 @@ void compute_sum_of_sufixes(vector<int> *weights,vector<int> *euler_tour,int ran
         //     cout << new_weight << endl;
         // }
     }
-    if(weights->at(self_loop_edge_id) != 0){
+
+    //If add the value of the selfloop to all weights, if it wasnt zero
+    if(self_loop_edge_old_value != 0){
         for (size_t i = 0; i < size; ++i) {
-            weights->at(i) = weights->at(self_loop_edge_id) - weights->at(i);
+            weights->at(i) = self_loop_edge_old_value + weights->at(i);
         }
     }
 }
@@ -381,20 +388,47 @@ int main(int argc, char** argv) {
     //  TMP TMP TMP
     // TMP TMP 
 
+
     // Compute sum of sufixes on weights
     //TODO not quite sure if is correct, the code in presentatision is.... 
     compute_sum_of_sufixes(&weights,&euler_tour,rank,size,self_loop_edge_id);
 
-    //TODO udelat ten posledni krok, kde zjistim ty urovne
     
-    // int level;
+    int level = -1;
+    char node = '\0';
     // // if you are forward edge
-    // if(weight == -1){
-    //     level = weights.at(rank) + 
-    // }
+    if(weight == -1){
+        level = weights.at(rank) + 1; 
+        node = edges.at(rank).to;
+        // cout << "Node: " << node << " level: " << level << endl;
+
+    }
+    MPI_Send(&node, 1, MPI_INT, 0, 0, MPI_COMM_WORLD);
+    MPI_Send(&level, 1, MPI_CHAR, 0, 0, MPI_COMM_WORLD);
+    vector<Node> nodes(8);
+    if(rank == 0){
+        for(int i = 0; i < tree_string.length();i++){
+            nodes.at(i).name = tree_string[i];
+        }
+        // Set root node as zero mannually, it is not even send
+        nodes.at(0).level = 0;
+
+        for (int i = 0; i < size; i++){
+            MPI_Recv(&node, 1, MPI_INT, i, 0, MPI_COMM_WORLD, NULL);
+            MPI_Recv(&level, 1, MPI_CHAR, i, 0, MPI_COMM_WORLD, NULL);
+            if(level != -1){
+                for(int j = 0; j < tree_string.length();j++){
+                    if(nodes.at(j).name == node) nodes.at(j).level = level;
+                    // cout << "Node: " << node << " level: " << level << endl;
+                }
+            }
+        }
+    }
+
+
     // if(rank == 0){
-    //     for(int i = 0; i < size;i++){
-    //         std::cout << edges.at(i).id<< "from: "<<edges.at(i).from <<edges.at(i).to<< std::endl;
+    //     for(int i = 0; i < tree_string.length();i++){
+    //         std::cout << nodes.at(i).name << " " << nodes.at(i).level<< std::endl;
     //     }
     // }
     // if(rank == 0){
