@@ -124,15 +124,7 @@ void receive_neighbours(vector<vector<Neighbour>> *neighbours,int rank) {
         delete[] int_array;
     }
 }
-// void send_edges(vector<Edge> *edges,int size){
-//     int *int_array = new int[size*2];
-//     flatten_vector(int_array, &edges);
 
-//     // Broadcast the flattened array
-//     MPI_Bcast(int_array, size, MPI_INT, 0, MPI_COMM_WORLD);
-    
-//     delete[] int_array;
-// }
 // Printing for debugging
 void print_adjecency_list(vector<vector<Neighbour>> new_neighbours){
     for (size_t i = 0; i < new_neighbours.size(); ++i) {
@@ -381,15 +373,7 @@ int main(int argc, char** argv) {
     MPI_Allgather(&weight, 1, MPI_INT, weights.data(), 1, MPI_INT, MPI_COMM_WORLD);
 
 
-    //TMP MPTMPTM
-    //
-    // weights.assign(size,1);
-    //  TMP TMP TMP
-    // TMP TMP 
-
-
     // Compute sum of sufixes on weights
-    //TODO not quite sure if is correct, the code in presentatision is.... 
     compute_sum_of_sufixes(&weights,&euler_tour,rank,size,self_loop_edge_id);
 
     
@@ -435,6 +419,7 @@ int main(int argc, char** argv) {
     }
 
     //TODO fix that it runs with only one node
+    //TODO fix that it runs on trees that doesnt have filled last level (but they are filled from left)
     //TODO remove commented
     //TODO refactor
     //TODO add comments
