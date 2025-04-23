@@ -25,6 +25,8 @@ struct Node{
     int level;
 };
 
+
+// From a coded binary tree creates adjecency list and list of edges
 void create_adjecency_list(string tree_string,vector<Edge> *edges, vector<vector<Neighbour>> *neighbours){
     int n = tree_string.size();
     neighbours->resize(n);
@@ -78,9 +80,11 @@ void send_neighbours(vector<vector<Neighbour>> *neighbours, int size){
     int neighbours_size = neighbours->size();
     // Broadcast the total number of vectors to all processes
     MPI_Bcast(&neighbours_size, 1, MPI_INT, 0, MPI_COMM_WORLD);
+    //Broadcast one vector at a time
     for(int vector = 0; vector < neighbours_size; vector++){
         int vector_size = neighbours->at(vector).size() *2;//how many ints are there in thsi vector;
         int *int_array = new int[vector_size];
+        //flaten it into array
         flatten_vector(int_array, &neighbours->at(vector));
         // Broadcast the size of the vector (number of elements)
         MPI_Bcast(&vector_size, 1, MPI_INT, 0, MPI_COMM_WORLD);
@@ -146,6 +150,7 @@ void print_adjecency_list(vector<vector<Neighbour>> new_neighbours){
 
 
 // Returns the next edge to be visited  in euler tour
+//From adjecency list, each edge will find its following edge
 int create_euler_tour(int edge, vector<vector<Neighbour>>neighbours){
     // First find the reverse edge to the currente edge
     int reverse;
@@ -177,6 +182,7 @@ int create_euler_tour(int edge, vector<vector<Neighbour>>neighbours){
 
 // Rank 0 collect the euler root into *euler_tour
 void euler_to_rank0(vector<int> *euler_tour,int next_tour,int rank,int world_size){
+    //Each edge/process sends its following edge, rank 0, collects it all
     if(rank == 0){
         euler_tour->at(0) = next_tour; // sets its own value
         int next_edge;
@@ -195,12 +201,13 @@ void euler_to_rank0(vector<int> *euler_tour,int next_tour,int rank,int world_siz
 // that way creating a root
 // Return the id of the self loop edge
 int introduce_root(vector<int> *euler_tour,vector<Edge> *edges,char root_char){
-    //Just for hadnlaning specific case where there are only two nodes in a tree 
+    //Just for handling specific case where there are only two nodes in a tree 
     if(euler_tour->size() == 2){
         euler_tour->at(1) = 1;
         return 1;
     }
 
+    //There are two edges going to root, we need the second one
     bool first = true;
     for(Edge& edge : *edges){
         if(edge.to == root_char){
@@ -249,6 +256,9 @@ void create_rank_vector(vector<int> *ranks,vector<int> *euler_tour,int rank,int 
     }
 }
 
+
+// Compute sum of sufixes on weigths
+// Using basic Parallel sufix sum
 void compute_sum_of_sufixes(vector<int> *weights,vector<int> *euler_tour,int rank,int size,int self_loop_edge_id){
     //crete copy of euler rout
     //we dont want change the original
@@ -266,11 +276,7 @@ void compute_sum_of_sufixes(vector<int> *weights,vector<int> *euler_tour,int ran
     int self_loop_edge_old_value = weights->at(self_loop_edge_id);
     weights->at(self_loop_edge_id) = 0;
 
-    // if(rank == 3){
-    //     for(int i = 0; i < size;i++){
-    //         std::cout << weights->at(i)<< std::endl;
-    //     }
-    // }
+
     // each edge in each iteration find its rank and succesor
     // all processes then then gather the new values together, so each process have new updated vectors 
     for (int k = 1; k < ceil(log2(size)) + 1;k++){
@@ -278,12 +284,10 @@ void compute_sum_of_sufixes(vector<int> *weights,vector<int> *euler_tour,int ran
         int new_succ = succesor_list.at(succesor_list.at(rank));
         MPI_Allgather(&new_weight, 1, MPI_INT, weights->data(), 1, MPI_INT, MPI_COMM_WORLD);
         MPI_Allgather(&new_succ, 1, MPI_INT, succesor_list.data(), 1, MPI_INT, MPI_COMM_WORLD);
-        // if(rank == 0){
-        //     cout << new_weight << endl;
-        // }
     }
 
-    //If add the value of the selfloop to all weights, if it wasnt zero
+    //If the last value was not zero (before overwriting) add the value of the selfloop to all weights
+    //It should be 1, since it is backward edge
     if(self_loop_edge_old_value != 0){
         for (size_t i = 0; i < size; ++i) {
             weights->at(i) = self_loop_edge_old_value + weights->at(i);
@@ -300,7 +304,7 @@ vector<int> create_positions_vector(vector<int> *ranks,int size){
     return positions_vector;
 }
 
-//Loop through adjecency list to find inverse edge
+//Loop through adjecency list to find inverse edge of edge edge_id
 int find_inverse_edge_id(vector<vector<Neighbour>> *adjecency_list,int edge_id){
     for(int i =0; i < adjecency_list->size();i++){
         for(int j = 0; j < adjecency_list->at(i).size();j++){
@@ -331,10 +335,12 @@ int main(int argc, char** argv) {
     MPI_Comm_rank(MPI_COMM_WORLD, &rank);
     MPI_Comm_size(MPI_COMM_WORLD, &size);
 
-    
+    //For storing all the edges
     vector<Edge> edges;
+    //For adjecency list, i use vector instead of a list
     vector<vector<Neighbour>> neighbours;
 
+    //Loaded coded tree on input
     std::string tree_string = argv[1];
 
     // Handle edge case if there is only one node in the tree
@@ -347,14 +353,16 @@ int main(int argc, char** argv) {
         MPI_Finalize(); return 0;
     } 
 
-    vector<vector<Neighbour>> new_neighbours;
 
+
+
+    vector<vector<Neighbour>> new_neighbours;
     if (rank == 0) {
         // Rank 0 parses the input string and creates the adjacency list
         // I use a vector for the adjacency list since it's conviniet dynamic type
         create_adjecency_list(tree_string,&edges,&neighbours);
 
-        //  and distributes neighbour information to all processes
+        // and distributes it to all processes
         send_neighbours(&neighbours,size);
         new_neighbours = neighbours;
     } 
@@ -362,79 +370,105 @@ int main(int argc, char** argv) {
         // Other proccesses receives the neighbour list
         receive_neighbours(&new_neighbours,rank);
     }
+
+    //Other procesess prepare edges vector
     if(rank!=0){
         edges.resize(size);
     }
     // Broadcast edges to everyone
     MPI_Bcast(edges.data(), size * sizeof(Edge), MPI_BYTE, 0, MPI_COMM_WORLD);
 
-    //Each process/edge finds its following edge 
-    int edge_id = rank;
-    int next_tour = create_euler_tour(edge_id,new_neighbours);
 
+
+
+
+    //From this on each process is responsible for edge with id equal rank (rank meaning id of a process)
+    int edge_id = rank;
+    //Each process/edge finds its following edge 
+    //Creating euler tour
+    int next_tour = create_euler_tour(edge_id,new_neighbours);
     // Rank 0 collects the euler tour to euler_tour
     vector<int> euler_tour(edges.size());
     euler_to_rank0(&euler_tour,next_tour,rank,size);
 
+
+
+
+
+    // I change the tour so it reflects that i am workign with a tree, so it doesnt treat the path like it is a graph with no root
     int self_loop_edge_id;
-    //Change the root so there is root
+    //Change the euler at position self_loop_edge_id so there is root
+    //Meaning the edge self_loop_edge_id doesnt go back to root, but poining to itself
     if(rank == 0){
         self_loop_edge_id = introduce_root(&euler_tour,&edges,tree_string[0]);
     }
-    // Send the euler tour values backto the proccesse, one proccess will recieve changed value
+    // Send the euler tour values backto the proccesse (one proccess will recieve changed value)
     MPI_Scatter(euler_tour.data(),1,MPI_INT,&next_tour,1,MPI_INT,0,MPI_COMM_WORLD);
+
+
+
 
     // Compute rank vector (rank is the distance of each edge to the end)
     vector<int> ranks;
     create_rank_vector(&ranks,&euler_tour,rank,size,self_loop_edge_id);
     // Create a vector with positions, positions is just N - rank
     vector<int> positions = create_positions_vector(&ranks,size);
-    
+
+
+
+
+
     //Each edge finds its inverse edge
     int inverse_edge_id = find_inverse_edge_id(&new_neighbours,rank);
-
     // Create vector of weights, weight of forward edge is -1 else 1
     // Forward edge has lower position than its iverse counterpart
-    // First each figures out it own weight, then gather it all together
+    // First each figures out its own weight, then gather it all together
     int weight = positions.at(rank) < positions.at(inverse_edge_id) ? -1 : 1;
     vector<int> weights(size);
     MPI_Allgather(&weight, 1, MPI_INT, weights.data(), 1, MPI_INT, MPI_COMM_WORLD);
+
+
+
 
 
     // Compute sum of sufixes on weights
     compute_sum_of_sufixes(&weights,&euler_tour,rank,size,self_loop_edge_id);
 
     
-    int level = -1;
+
+
+    //Forward edges find out level of nodes to which they are going
+    int level = -1; // Value for backward edges
     char node = '\0';
     // // if you are forward edge
     if(weight == -1){
         level = weights.at(rank) + 1; 
         node = edges.at(rank).to;
 
-    }
+    } // Each edge send its node name and its level
     MPI_Send(&node, 1, MPI_INT, 0, 0, MPI_COMM_WORLD);
     MPI_Send(&level, 1, MPI_CHAR, 0, 0, MPI_COMM_WORLD);
-    vector<Node> nodes(tree_string.length());
+    vector<Node> nodes(tree_string.length()); //Vector for storing nodes with their levels
+    // Rank 0 receives the levels and put them altogether
     if(rank == 0){
         for(int i = 0; i < tree_string.length();i++){
             nodes.at(i).name = tree_string[i];
         }
-        // Set root node as zero mannually, it is not even send
+        // Set root node as zero mannually
         nodes.at(0).level = 0;
 
+        //Receive all the node names and levels
         for (int i = 0; i < size; i++){
             MPI_Recv(&node, 1, MPI_INT, i, 0, MPI_COMM_WORLD, NULL);
             MPI_Recv(&level, 1, MPI_CHAR, i, 0, MPI_COMM_WORLD, NULL);
             if(level != -1){
+                //Find the node and sets its level
                 for(int j = 0; j < tree_string.length();j++){
                     if(nodes.at(j).name == node) nodes.at(j).level = level;
-                    // cout << "Node: " << node << " level: " << level << endl;
                 }
             }
         }
     }
-
     // Rank 0 prints output
     if(rank == 0){
         print_output(tree_string,&nodes);
