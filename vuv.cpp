@@ -175,7 +175,7 @@ int create_euler_tour(int edge, vector<vector<Neighbour>>neighbours){
     return -1;
 }
 
-// Rank 0 collect the euler root into *euler_toor
+// Rank 0 collect the euler root into *euler_tour
 void euler_to_rank0(vector<int> *euler_tour,int next_tour,int rank,int world_size){
     if(rank == 0){
         euler_tour->at(0) = next_tour; // sets its own value
@@ -195,6 +195,12 @@ void euler_to_rank0(vector<int> *euler_tour,int next_tour,int rank,int world_siz
 // that way creating a root
 // Return the id of the self loop edge
 int introduce_root(vector<int> *euler_tour,vector<Edge> *edges,char root_char){
+    //Just for hadnlaning specific case where there are only two nodes in a tree 
+    if(euler_tour->size() == 2){
+        euler_tour->at(1) = 1;
+        return 1;
+    }
+
     bool first = true;
     for(Edge& edge : *edges){
         if(edge.to == root_char){
@@ -319,6 +325,16 @@ int main(int argc, char** argv) {
 
     std::string tree_string = argv[1];
 
+    // Handle edge case if there is only one node in the tree
+    if(tree_string.size() == 1){
+        // Formula for number of processed doesnt work for one node
+        // It returns zero, and when MPI is run with 0 processes, it creates some default number of processe (12 on merlin)
+        if(rank == 0){
+            cout<<argv[1] << ":" << 0 << endl;
+        }
+        MPI_Finalize(); return 0;
+    } 
+
     vector<vector<Neighbour>> new_neighbours;
 
     if (rank == 0) {
@@ -383,7 +399,6 @@ int main(int argc, char** argv) {
     if(weight == -1){
         level = weights.at(rank) + 1; 
         node = edges.at(rank).to;
-        // cout << "Node: " << node << " level: " << level << endl;
 
     }
     MPI_Send(&node, 1, MPI_INT, 0, 0, MPI_COMM_WORLD);
@@ -418,9 +433,6 @@ int main(int argc, char** argv) {
         cout << endl;
     }
 
-    //TODO fix that it runs with only one node
-    //TODO fix that it runs on trees that doesnt have filled last level (but they are filled from left)
-    //TODO remove commented
     //TODO refactor
     //TODO add comments
 
