@@ -322,7 +322,6 @@ int main(int argc, char** argv) {
     int rank, size;
     MPI_Comm_rank(MPI_COMM_WORLD, &rank);
     MPI_Comm_size(MPI_COMM_WORLD, &size);
-
     vector<Edge> edges;
     vector<vector<Neighbour>> neighbours;
 
@@ -405,7 +404,7 @@ int main(int argc, char** argv) {
     }
     MPI_Send(&node, 1, MPI_INT, 0, 0, MPI_COMM_WORLD);
     MPI_Send(&level, 1, MPI_CHAR, 0, 0, MPI_COMM_WORLD);
-    vector<Node> nodes(8);
+    vector<Node> nodes(tree_string.length());
     if(rank == 0){
         for(int i = 0; i < tree_string.length();i++){
             nodes.at(i).name = tree_string[i];
@@ -425,19 +424,20 @@ int main(int argc, char** argv) {
         }
     }
 
+    if(rank == 0){
+        for(int i = 0; i < tree_string.length();i++){
+            std::cout << nodes.at(i).name << ":" << nodes.at(i).level;
+            if (i != tree_string.length() - 1) {
+                std::cout << ",";
+            }
+        }
+        cout << endl;
+    }
 
-    // if(rank == 0){
-    //     for(int i = 0; i < tree_string.length();i++){
-    //         std::cout << nodes.at(i).name << " " << nodes.at(i).level<< std::endl;
-    //     }
-    // }
-    // if(rank == 0){
-    //     for(int i = 0; i < euler_tour.size();i++){
-    //         std::cout << "Edge: "<< i << "next: " << euler_tour.at(i)<< std::endl;
-    //     }
-    // }
-    // std::cerr << "Rank " << rank << " received euler_tour value: " << next_tour << std::endl;
-    // print_adjecency_list(new_neighbours);
+    //TODO fix that it runs with only one node
+    //TODO remove commented
+    //TODO refactor
+    //TODO add comments
 
     // Finalize
     MPI_Finalize();
