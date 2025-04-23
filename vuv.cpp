@@ -312,6 +312,16 @@ int find_inverse_edge_id(vector<vector<Neighbour>> *adjecency_list,int edge_id){
     return -1;
 }
 
+// Print the output in the correct format
+void print_output(std::string tree_string, vector<Node> *nodes){
+    for(int i = 0; i < tree_string.length();i++){
+        std::cout << nodes->at(i).name << ":" << nodes->at(i).level;
+        if (i != tree_string.length() - 1) {
+            std::cout << ",";
+        }
+    }
+    cout << endl;
+}
 
 int main(int argc, char** argv) {
     // Init MPI
@@ -320,6 +330,8 @@ int main(int argc, char** argv) {
     int rank, size;
     MPI_Comm_rank(MPI_COMM_WORLD, &rank);
     MPI_Comm_size(MPI_COMM_WORLD, &size);
+
+    
     vector<Edge> edges;
     vector<vector<Neighbour>> neighbours;
 
@@ -423,18 +435,11 @@ int main(int argc, char** argv) {
         }
     }
 
+    // Rank 0 prints output
     if(rank == 0){
-        for(int i = 0; i < tree_string.length();i++){
-            std::cout << nodes.at(i).name << ":" << nodes.at(i).level;
-            if (i != tree_string.length() - 1) {
-                std::cout << ",";
-            }
-        }
-        cout << endl;
+        print_output(tree_string,&nodes);
     }
 
-    //TODO refactor
-    //TODO add comments
 
     // Finalize
     MPI_Finalize();
